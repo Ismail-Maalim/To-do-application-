@@ -23,7 +23,7 @@ public class TodoApp extends JFrame {
         setSize(600, 500);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-        getContentPane().setBackground(new Color(240, 240, 240));
+        getContentPane().setBackground(new Color(28, 10, 10));
 
         loadTasks();
         initUI();
@@ -34,7 +34,7 @@ public class TodoApp extends JFrame {
     private void initUI() {
         // Header
         JPanel headerPanel = new JPanel();
-        headerPanel.setBackground(new Color(44, 62, 80));
+        headerPanel.setBackground(new Color(104, 109, 114));
         headerPanel.setPreferredSize(new Dimension(0, 60));
         headerPanel.setLayout(new BorderLayout());
 
@@ -45,19 +45,28 @@ public class TodoApp extends JFrame {
         add(headerPanel, BorderLayout.NORTH);
 
         // Input panel
-        JPanel inputPanel = new JPanel(new BorderLayout());
-        inputPanel.setBackground(new Color(240, 240, 240));
+        JPanel inputPanel = new JPanel(new BorderLayout(10, 0));
+        inputPanel.setBackground(new Color(85, 85, 85)); // Light dark background
         inputPanel.setBorder(new EmptyBorder(10, 15, 10, 15));
 
-        taskInput = new JTextField();
-        taskInput.setFont(new Font("Arial", Font.PLAIN, 11));
+        taskInput = new JTextField() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                g.setColor(new Color(255, 255, 255, 200)); // White translucent
+                g.fillRect(0, 0, getWidth(), getHeight());
+                super.paintComponent(g);
+            }
+        };
+        taskInput.setOpaque(false);
+        taskInput.setFont(new Font("Arial", Font.PLAIN, 12));
         taskInput.setPreferredSize(new Dimension(400, 30));
+        taskInput.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         taskInput.addActionListener(e -> addTask());
 
         JButton addButton = new JButton("➕ Add");
-        addButton.setBackground(new Color(39, 174, 96));
-        addButton.setForeground(Color.WHITE);
-        addButton.setFont(new Font("Arial", Font.BOLD, 10));
+        addButton.setBackground(new Color(173, 216, 230)); // Light blue
+        addButton.setForeground(Color.BLACK); // Contrast
+        addButton.setFont(new Font("Arial", Font.BOLD, 11));
         addButton.setFocusPainted(false);
         addButton.addActionListener(e -> addTask());
 
@@ -70,12 +79,35 @@ public class TodoApp extends JFrame {
         listPanel.setBackground(Color.WHITE);
         listPanel.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
 
-        taskList = new JList<>(listModel);
-        taskList.setFont(new Font("Arial", Font.PLAIN, 11));
+        taskList = new JList<String>(listModel) {
+            @Override
+            public String getToolTipText(MouseEvent e) {
+                int index = locationToIndex(e.getPoint());
+                if (index > -1 && index < tasks.size()) {
+                    Task task = tasks.get(index);
+                    return task.isCompleted() ? "Completed task" : "Pending task";
+                }
+                return null;
+            }
+        };
+        ToolTipManager.sharedInstance().registerComponent(taskList);
+        taskList.setFont(new Font("Arial", Font.PLAIN, 12));
         taskList.setBackground(Color.WHITE);
         taskList.addListSelectionListener(e -> {
             selectedIndex = taskList.getSelectedIndex();
             updateStatus();
+        });
+        taskList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int index = taskList.locationToIndex(e.getPoint());
+                if (index > -1 && index < tasks.size()) {
+                    tasks.get(index).toggleCompleted();
+                    saveTasks();
+                    refreshTaskList();
+                    updateStatus();
+                }
+            }
         });
 
         JScrollPane scrollPane = new JScrollPane(taskList);
@@ -89,8 +121,8 @@ public class TodoApp extends JFrame {
 
         // Status bar
         statusLabel = new JLabel("Total: 0 | Completed: 0 | Pending: 0");
-        statusLabel.setBackground(new Color(236, 240, 241));
-        statusLabel.setForeground(new Color(52, 73, 94));
+        statusLabel.setBackground(new Color(45, 112, 129));
+        statusLabel.setForeground(new Color(50, 71, 86));
         statusLabel.setFont(new Font("Arial", Font.PLAIN, 9));
         statusLabel.setOpaque(true);
         statusLabel.setBorder(new EmptyBorder(5, 10, 5, 10));
@@ -99,7 +131,7 @@ public class TodoApp extends JFrame {
 
     private JPanel createButtonPanel() {
         JPanel buttonPanel = new JPanel();
-        buttonPanel.setBackground(new Color(240, 240, 240));
+        buttonPanel.setBackground(new Color(75, 114, 50));
         buttonPanel.setBorder(new EmptyBorder(10, 15, 10, 15));
 
         JButton completeBtn = createButton("✓ Complete", new Color(52, 152, 219), e -> completeTask());
@@ -205,7 +237,12 @@ public class TodoApp extends JFrame {
     private void refreshTaskList() {
         listModel.clear();
         for (Task task : tasks) {
-            String displayText = (task.completed ? "✓ " : "○ ") + task.text;
+            String displayText;
+            if (task.completed) {
+                displayText = "<html><strike>☒ " + task.text + "</strike></html>";
+            } else {
+                displayText = "<html>☐ " + task.text + "</html>";
+            }
             listModel.addElement(displayText);
         }
     }
@@ -221,7 +258,7 @@ public class TodoApp extends JFrame {
         try {
             Files.createDirectories(Paths.get(DATA_FILE).getParent());
             if (Files.exists(Paths.get(DATA_FILE))) {
-                String content = Files.readString(Paths.get(DATA_FILE));
+                String content = new String(Files.readAllBytes(Paths.get(DATA_FILE)));
                 // Simple JSON parsing - in production, use a proper JSON library like Gson
                 // For now, we'll start with empty list if file exists but can't parse
                 tasks = new ArrayList<>();
@@ -238,17 +275,16 @@ public class TodoApp extends JFrame {
             StringBuilder json = new StringBuilder("[");
             for (int i = 0; i < tasks.size(); i++) {
                 Task task = tasks.get(i);
-                json.append(String.format("""
-                    {
-                        "id": %d,
-                        "text": "%s",
-                        "completed": %s,
-                        "created_at": "%s"
-                    }""", task.id, task.text.replace("\"", "\\\""), task.completed, task.createdAt));
+                json.append(String.format("{\n" +
+                    "    \"id\": %d,\n" +
+                    "    \"text\": \"%s\",\n" +
+                    "    \"completed\": %s,\n" +
+                    "    \"created_at\": \"%s\"\n" +
+                    "}", task.id, task.text.replace("\"", "\\\""), task.completed, task.createdAt));
                 if (i < tasks.size() - 1) json.append(",");
             }
             json.append("]");
-            Files.writeString(Paths.get(DATA_FILE), json.toString());
+            Files.write(Paths.get(DATA_FILE), json.toString().getBytes("UTF-8"));
         } catch (IOException e) {
             JOptionPane.showMessageDialog(this, "Could not save tasks: " + e.getMessage(), "Save Error", JOptionPane.ERROR_MESSAGE);
         }
