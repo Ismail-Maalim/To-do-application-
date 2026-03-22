@@ -31,3 +31,5 @@ bin/
 
 ### Java Compilation ###
 *.class
+### IntelliJ IDEA ###
+.idea/
